@@ -1,6 +1,294 @@
-# CAV Camera Perception Pipeline
+# CAV Camera Perception Pipeline  (v2)
 
-> Real-time object detection and situational awareness for **Connected Autonomous Vehicles (CAV)**  
+> Research-grade real-time perception system for **Connected Autonomous Vehicles (CAV)**  
+> USB camera · YOLO11 · ByteTrack · Stop-sign decision engine · V2X simulation
+
+[![Python](https://img.shields.io/badge/Python-3.10%2B-blue)](https://python.org)
+[![Ultralytics](https://img.shields.io/badge/Ultralytics-YOLO11-orange)](https://ultralytics.com)
+[![OpenCV](https://img.shields.io/badge/OpenCV-4.9%2B-green)](https://opencv.org)
+
+---
+
+## Overview
+
+| Feature | Status |
+|---|---|
+| USB camera capture (Mac / Ubuntu / Jetson) | ✅ |
+| YOLO11 object detection | ✅ |
+| ByteTrack persistent object tracking | ✅ |
+| Live annotated display with FPS counter | ✅ |
+| Detection confidence filtering | ✅ |
+| CSV + JSON Lines logging | ✅ |
+| Screenshot / frame saving (`s` key) | ✅ |
+| Monocular distance estimation | ⚠️ Placeholder |
+| Stop-sign intersection decision engine (WAIT/PROCEED) | ✅ |
+| V2X simulation — BSM, DOM, ISM messages | ✅ |
+| YAML config system | ✅ |
+| CLI arguments | ✅ |
+
+### Detected classes
+`person` · `bicycle` · `car` · `motorcycle` · `bus` · `truck` · `traffic light` · `stop sign`
+
+---
+
+## Project Structure
+
+```
+cav-camera-perception/
+├── main.py                   ← Entry point
+├── requirements.txt
+├── .gitignore
+├── README.md
+├── configs/
+│   └── config.yaml           ← All tunable parameters
+├── logs/
+│   ├── detections.csv        ← Created at runtime
+│   └── detections.jsonl      ← JSON Lines log
+├── outputs/                  ← Saved frames / screenshots
+└── src/
+    ├── __init__.py
+    ├── camera.py             ← USB camera handler
+    ├── detector.py           ← YOLO inference + frame annotation
+    ├── tracker.py            ← ByteTrack / BoT-SORT wrapper
+    ├── decision_engine.py    ← Stop-sign state machine + safety rules
+    ├── v2x.py                ← V2X message simulation (BSM/DOM/ISM)
+    ├── logger.py             ← Thread-safe CSV + JSONL logger
+    └── utils.py              ← FPSCounter, overlays, config loader
+```
+
+---
+
+## Quick Start (macOS)
+
+### 1. Clone
+```bash
+git clone https://github.com/mahin1-coder/CAV-camera.git
+cd CAV-camera
+```
+
+### 2. Virtual environment
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+### 3. Install dependencies
+```bash
+pip install -r requirements.txt
+```
+> `ultralytics` auto-downloads `yolo11n.pt` (~6 MB) on first run.
+
+### 4. Grant camera permission (macOS only, one-time)
+**System Settings → Privacy & Security → Camera → enable Terminal**
+
+### 5. Run
+```bash
+python main.py
+```
+
+---
+
+## CLI Reference
+
+```
+python main.py [OPTIONS]
+```
+
+| Flag | Default | Description |
+|---|---|---|
+| `--camera INDEX` | `0` | USB camera device index |
+| `--model MODEL` | `yolo11n.pt` | YOLO model name or path |
+| `--conf FLOAT` | `0.35` | Detection confidence threshold |
+| `--no-v2x` | off | Disable V2X broadcast simulator |
+| `--no-log` | off | Disable CSV + JSON logging |
+| `--save-frames` | off | Save every annotated frame to `outputs/` |
+| `--config PATH` | `configs/config.yaml` | Path to YAML config |
+
+### Examples
+```bash
+python main.py --camera 0 --model yolo11n.pt --conf 0.35
+python main.py --camera 1                        # external USB camera
+python main.py --no-v2x --no-log                 # minimal mode
+python main.py --save-frames                     # record all frames
+```
+
+### Keyboard shortcuts
+| Key | Action |
+|---|---|
+| `q` / `ESC` | Quit |
+| `s` | Save screenshot to `outputs/` |
+
+---
+
+## Configuration
+
+All parameters live in **`configs/config.yaml`** — no code changes needed for common adjustments:
+
+```yaml
+camera:
+  index: 0          # USB camera index
+  width: 1280
+  height: 720
+  fps: 30
+
+model:
+  name: "yolo11n.pt"
+  confidence: 0.35
+  tracker: "bytetrack.yaml"   # or "botsort.yaml"
+
+decision:
+  stop_sign_confidence: 0.50
+  stop_hold_frames: 30         # frames to hold at stop sign
+  cross_traffic_x_ratio: 0.25  # side-zone fraction for cross-traffic detection
+```
+
+---
+
+## Decision Engine — Stop-Sign Scenario
+
+The engine implements a state machine:
+
+```
+IDLE → STOPPING → WAIT (cross traffic) → STOPPING → PROCEED → IDLE
+                ↘ PROCEED (no traffic, hold expired) ↗
+```
+
+| Action | Trigger |
+|---|---|
+| `STOP` | Stop sign detected, evaluating |
+| `WAIT` | Stop sign + vehicle in left/right cross-traffic zone |
+| `PROCEED` | Hold timer expired, no cross traffic |
+| `SLOW_DOWN` | Pedestrian within 15 m |
+| `CAUTION` | Traffic light / object within 10 m |
+| `NOMINAL` | No hazards |
+
+---
+
+## V2X Simulation
+
+Three message types are printed as JSON to stdout every second:
+
+| Type | Description |
+|---|---|
+| `BSM` | Basic Safety Message — ego vehicle status + all perceived objects |
+| `DOM` | Detected-Object Message — one message per detected object |
+| `ISM` | Intersection State Message — simulated SPaT from Road-Side Unit |
+
+---
+
+## Logs
+
+| File | Format | Description |
+|---|---|---|
+| `logs/detections.csv` | CSV (Pandas) | Structured detection rows |
+| `logs/detections.jsonl` | JSON Lines | One JSON object per detection row |
+
+---
+
+## Ubuntu / Jetson Setup
+
+```bash
+# 1. Clone
+git clone https://github.com/mahin1-coder/CAV-camera.git
+cd CAV-camera
+
+# 2. Virtual environment
+python3 -m venv .venv
+source .venv/bin/activate
+
+# 3. Install
+pip install -r requirements.txt
+
+# 4. Check camera
+ls /dev/video*
+sudo usermod -aG video $USER   # log out and back in if permission denied
+
+# 5. Run
+python main.py --camera 0
+```
+
+### Jetson CUDA notes
+Install the NVIDIA-provided PyTorch wheel **before** `pip install -r requirements.txt`:
+```bash
+# Example for JetPack 6.x — check https://forums.developer.nvidia.com/t/pytorch-for-jetson
+pip install torch torchvision --index-url <NVIDIA_JETSON_WHEEL_URL>
+pip install -r requirements.txt
+```
+
+---
+
+## Push to GitHub
+
+```bash
+git add .
+git commit -m "Upgrade CAV perception pipeline"
+git branch -M main
+git remote add origin https://github.com/mahin1-coder/CAV-camera.git
+git push -u origin main
+```
+
+---
+
+## Architecture
+
+```
+USB Camera
+    │  BGR frame
+    ▼
+camera.py ──────────────────────────────────────────────────────┐
+    │                                                            │
+    ▼                                                            │
+detector.py  (YOLO11 + ByteTrack)                               │
+    │  list[Detection]                                           │
+    ├──▶ logger.py          → logs/detections.csv + .jsonl      │
+    ├──▶ decision_engine.py → DrivingDecision (state machine)   │
+    ├──▶ v2x.py             → BSM / DOM / ISM (stdout JSON)     │
+    └──▶ annotate_frame()   ────────────────────────────────────▶│
+                                                                 │
+                                                        cv2.imshow()
+```
+
+---
+
+## Roadmap
+
+- [ ] Camera calibration for accurate focal length
+- [ ] Traffic-light colour classification (green / yellow / red)
+- [ ] Depth model / stereo vision for real distance estimation
+- [ ] ROS 2 integration (Humble / Iron)
+- [ ] UDP multicast V2X simulation (multi-vehicle LAN)
+- [ ] CARLA / SUMO simulator integration
+- [ ] Jetson TensorRT export (`yolo11n.engine`)
+- [ ] AEB (Automatic Emergency Braking) via time-to-collision
+
+---
+
+## Requirements
+
+- Python **3.10+**
+- [OpenCV](https://opencv.org/) `>=4.9`
+- [Ultralytics](https://github.com/ultralytics/ultralytics) `>=8.3` (includes ByteTrack)
+- [NumPy](https://numpy.org/) `>=1.26`
+- [Pandas](https://pandas.pydata.org/) `>=2.2`
+- [PyYAML](https://pyyaml.org/) `>=6.0`
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE) for details.
+
+---
+
+## Citation
+
+```bibtex
+@misc{cav-camera-perception,
+  title  = {CAV Camera Perception Pipeline},
+  year   = {2026},
+  url    = {https://github.com/mahin1-coder/CAV-camera}
+}
+```
 > using a USB camera, YOLO11, and a modular Python pipeline.
 
 ---

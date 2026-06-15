@@ -1,4 +1,4 @@
-# CAV Camera Perception Pipeline — Python dependencies
+# CAV Camera Perception Pipeline — Python dependencies  (v2)
 # Tested on Python 3.10+
 #
 # Install with:
@@ -7,11 +7,14 @@
 # ── Core computer vision ──────────────────────────────────────────────────────
 opencv-python>=4.9.0.80
 
-# ── YOLO inference engine (bundles PyTorch requirement resolution) ─────────────
+# ── YOLO inference + ByteTrack/BoT-SORT tracking (bundles PyTorch) ────────────
 ultralytics>=8.3.0
 
 # ── Numerical computing ───────────────────────────────────────────────────────
 numpy>=1.26.0
 
-# ── Structured data / CSV logging ─────────────────────────────────────────────
+# ── Structured data / CSV + JSON logging ─────────────────────────────────────
 pandas>=2.2.0
+
+# ── YAML config loading ───────────────────────────────────────────────────────
+pyyaml>=6.0

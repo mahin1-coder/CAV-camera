@@ -1,0 +1,97 @@
+# =============================================================================
+#  CAV Camera Perception Pipeline — Master Configuration
+#  Edit this file to customise every aspect of the pipeline.
+#  CLI flags (--camera, --model, --conf) override the values below.
+# =============================================================================
+
+# ── Camera ────────────────────────────────────────────────────────────────────
+camera:
+  index:   0       # USB camera device index (0 = default/built-in)
+  width:   1280    # Preferred capture width  (driver may cap lower)
+  height:  720     # Preferred capture height
+  fps:     30      # Preferred capture frame-rate
+
+# ── YOLO Model & Tracking ─────────────────────────────────────────────────────
+model:
+  name:        "yolo11n.pt"    # Auto-downloaded from Ultralytics on first run
+  confidence:  0.35            # Detection confidence threshold  [0–1]
+  iou:         0.45            # NMS IoU threshold                [0–1]
+  tracker:     "bytetrack.yaml"  # "bytetrack.yaml" | "botsort.yaml" | null
+  device:      ""              # "" = auto (cpu/mps/cuda:0)
+
+# ── Classes of Interest (COCO IDs) ────────────────────────────────────────────
+classes:
+  ids: [0, 1, 2, 3, 5, 7, 9, 11]
+  names:
+    0:  "person"
+    1:  "bicycle"
+    2:  "car"
+    3:  "motorcycle"
+    5:  "bus"
+    7:  "truck"
+    9:  "traffic light"
+    11: "stop sign"
+
+# Bounding-box colours per class (BGR)
+  colors:
+    person:        [0,   255,   0]
+    bicycle:       [0,   165, 255]
+    car:           [0,     0, 255]
+    motorcycle:    [255,   0, 255]
+    bus:           [255, 165,   0]
+    truck:         [0,   255, 255]
+    traffic light: [255, 255,   0]
+    stop sign:     [0,     0, 200]
+
+# ── Display ───────────────────────────────────────────────────────────────────
+display:
+  window_name:    "CAV Perception Pipeline"
+  show_fps:       true
+  show_distance:  true
+  show_track_id:  true
+  font_scale:     0.55
+  box_thickness:  2
+
+# ── Logging ───────────────────────────────────────────────────────────────────
+logging:
+  enabled:            true
+  log_dir:            "logs"
+  csv_file:           "detections.csv"
+  json_file:          "detections.jsonl"   # JSON Lines — one object per line
+  log_every_n_frames: 1
+
+# ── Frame / Screenshot Output ─────────────────────────────────────────────────
+output:
+  save_frames:        false   # Save every frame to outputs/
+  output_dir:         "outputs"
+  save_on_detection:  false   # Save a frame whenever objects are detected
+
+# ── Distance Estimation (monocular placeholder) ───────────────────────────────
+# Calibrate FOCAL_LENGTH_PX with a checkerboard for real-world accuracy.
+# For production, use stereo vision or a depth sensor.
+distance:
+  focal_length_px: 700.0
+  known_widths_m:
+    person:        0.50
+    bicycle:       0.60
+    car:           1.80
+    motorcycle:    0.80
+    bus:           2.50
+    truck:         2.50
+    traffic light: 0.30
+    stop sign:     0.75
+
+# ── Decision Engine ───────────────────────────────────────────────────────────
+decision:
+  stop_sign_confidence:    0.50   # Min confidence to act on stop sign
+  cross_traffic_x_ratio:   0.25   # Fraction of frame width = side zone
+  cross_traffic_classes:   [2, 3, 5, 7]  # car, motorcycle, bus, truck
+  stop_hold_frames:        30     # Frames to hold WAIT after stop sign seen
+  close_range_m:           10.0   # Any object closer → CAUTION
+  person_range_m:          15.0   # Pedestrian closer → SLOW_DOWN
+
+# ── V2X Simulation ────────────────────────────────────────────────────────────
+v2x:
+  enabled:               true
+  vehicle_id:            "EGO_001"
+  broadcast_interval_s:  1.0

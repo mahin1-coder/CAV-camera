@@ -1,173 +1,133 @@
 """
-CAV Camera Perception Pipeline — entry point.
-=============================================
+CAV Camera Perception Pipeline — entry point  (v2 research upgrade)
+====================================================================
 
-Real-time object detection and situational awareness for
-Connected Autonomous Vehicles (CAV) using a USB camera and YOLO.
+Real-time object detection, tracking, and situational awareness for
+Connected Autonomous Vehicles (CAV) using a USB camera and YOLO11.
 
 Usage
 -----
-    python main.py                        # default USB camera (index 0)
-    python main.py --camera 1             # external USB camera
-    python main.py --model yolov8n.pt     # alternative YOLO model
-    python main.py --no-v2x --no-log      # skip V2X sim and CSV logging
+    python main.py                                   # defaults from config.yaml
+    python main.py --camera 1                        # external USB camera
+    python main.py --model yolov8n.pt                # alternative YOLO model
+    python main.py --conf 0.40                       # confidence threshold
+    python main.py --no-v2x --no-log                 # disable V2X and logging
+    python main.py --save-frames                     # save every output frame
 
 Keyboard shortcuts
 ------------------
-    q  /  ESC — quit the pipeline
+    q / ESC    — quit
+    s          — save current frame screenshot to outputs/
 """
 
 from __future__ import annotations
 
 import argparse
 import sys
-import time
 
 import cv2
 
-from src.camera import Camera
-from src.config import (
-    CAMERA_INDEX,
-    DISPLAY_WINDOW_NAME,
-    FPS_POSITION,
-    LOG_EVERY_N_FRAMES,
-    MODEL_NAME,
-)
+from src.camera          import Camera
 from src.decision_engine import DecisionEngine
-from src.detector import Detector
-from src.logger import DetectionLogger
-from src.v2x_simulator import V2XSimulator
+from src.detector        import Detector
+from src.logger          import DetectionLogger
+from src.utils           import (
+    FPSCounter,
+    draw_decision,
+    draw_fps,
+    draw_info_bar,
+    load_config,
+    merge_cli,
+    save_frame,
+)
+from src.v2x             import V2XSimulator
 
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
 
-def _build_arg_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
+def _build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(
         description="CAV Camera Perception Pipeline",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument(
-        "--camera",
-        type=int,
-        default=CAMERA_INDEX,
-        metavar="INDEX",
-        help="USB camera device index (0 = first / built-in camera).",
-    )
-    parser.add_argument(
-        "--model",
-        type=str,
-        default=MODEL_NAME,
-        metavar="MODEL",
-        help="Ultralytics YOLO model name or path  (e.g. yolo11n.pt).",
-    )
-    parser.add_argument(
-        "--no-v2x",
-        action="store_true",
-        help="Disable the V2X broadcast simulator.",
-    )
-    parser.add_argument(
-        "--no-log",
-        action="store_true",
-        help="Disable CSV detection logging.",
-    )
-    return parser
-
-
-# ── Overlay helpers ───────────────────────────────────────────────────────────
-
-def _draw_fps(frame, fps: float) -> None:
-    """Render the current FPS in the top-left corner."""
-    cv2.putText(
-        frame,
-        f"FPS: {fps:5.1f}",
-        FPS_POSITION,
-        cv2.FONT_HERSHEY_SIMPLEX,
-        0.70,
-        (0, 255, 0),
-        2,
-        cv2.LINE_AA,
-    )
-
-
-def _draw_decision(frame, action: str, alerts: list[str]) -> None:
-    """Render the decision-engine output on the frame."""
-    h, w   = frame.shape[:2]
-    font   = cv2.FONT_HERSHEY_SIMPLEX
-
-    color_map: dict[str, tuple[int, int, int]] = {
-        "NOMINAL":   (0, 200,   0),
-        "CAUTION":   (0, 200, 255),
-        "SLOW_DOWN": (0, 165, 255),
-        "STOP":      (0,   0, 220),
-    }
-    color = color_map.get(action, (200, 200, 200))
-
-    # Action label — top-right
-    action_text = f"Action: {action}"
-    (lw, _), _ = cv2.getTextSize(action_text, font, 0.65, 2)
-    cv2.putText(
-        frame, action_text,
-        (w - lw - 10, 30),
-        font, 0.65, color, 2, cv2.LINE_AA,
-    )
-
-    # Alert lines — bottom-left (up to 4 most recent)
-    for i, alert in enumerate(alerts[:4]):
-        cv2.putText(
-            frame,
-            f"! {alert[:70]}",
-            (10, h - 15 - i * 22),
-            font, 0.46, (0, 200, 255), 1, cv2.LINE_AA,
-        )
+    p.add_argument("--camera",       type=int,   default=None,
+                   help="USB camera index (overrides config.yaml).")
+    p.add_argument("--model",        type=str,   default=None,
+                   help="YOLO model name / path (overrides config.yaml).")
+    p.add_argument("--conf",         type=float, default=None,
+                   help="Detection confidence threshold (overrides config.yaml).")
+    p.add_argument("--no-v2x",       action="store_true",
+                   help="Disable the V2X broadcast simulator.")
+    p.add_argument("--no-log",       action="store_true",
+                   help="Disable CSV + JSON detection logging.")
+    p.add_argument("--save-frames",  action="store_true",
+                   help="Save every annotated frame to outputs/.")
+    p.add_argument("--config",       type=str,   default="configs/config.yaml",
+                   help="Path to YAML config file.")
+    return p
 
 
 # ── Main pipeline ─────────────────────────────────────────────────────────────
 
 def main() -> int:
-    args = _build_arg_parser().parse_args()
+    args = _build_parser().parse_args()
 
-    # ── Camera ────────────────────────────────────────────────────────────────
-    camera = Camera(index=args.camera)
+    # ── Load config ───────────────────────────────────────────────────────────
+    try:
+        cfg = load_config(args.config)
+    except FileNotFoundError as exc:
+        print(f"[ERROR] {exc}")
+        return 1
+
+    cfg = merge_cli(cfg, args.camera, args.model, args.conf)
+
+    # ── Subsystem init ────────────────────────────────────────────────────────
+    camera = Camera(cfg["camera"])
     try:
         camera.open()
     except RuntimeError as exc:
         print(f"\n[ERROR] {exc}")
         return 1
 
-    # ── Detector ──────────────────────────────────────────────────────────────
-    detector = Detector(model_name=args.model)
+    detector        = Detector(cfg)
+    decision_engine = DecisionEngine(cfg.get("decision", {}))
+    fps_counter     = FPSCounter(window=30)
 
-    # ── Decision engine ───────────────────────────────────────────────────────
-    decision_engine = DecisionEngine()
-
-    # ── Logger (optional) ─────────────────────────────────────────────────────
     logger: DetectionLogger | None = None
-    if not args.no_log:
-        logger = DetectionLogger()
+    if not args.no_log and cfg.get("logging", {}).get("enabled", True):
+        logger = DetectionLogger(cfg.get("logging", {}))
 
-    # ── V2X simulator (optional) ──────────────────────────────────────────────
     v2x: V2XSimulator | None = None
-    if not args.no_v2x:
-        v2x = V2XSimulator()
+    if not args.no_v2x and cfg.get("v2x", {}).get("enabled", True):
+        v2x = V2XSimulator(cfg.get("v2x", {}))
         v2x.start()
 
-    # ── Print startup summary ─────────────────────────────────────────────────
+    output_cfg   = cfg.get("output", {})
+    save_every   = args.save_frames or output_cfg.get("save_frames", False)
+    save_on_det  = output_cfg.get("save_on_detection", False)
+    output_dir   = output_cfg.get("output_dir", "outputs")
+    log_n        = cfg.get("logging", {}).get("log_every_n_frames", 1)
+    win_name     = cfg.get("display", {}).get("window_name", "CAV Perception Pipeline")
+
+    # ── Startup banner ────────────────────────────────────────────────────────
+    sep = "─" * 58
     print(
-        f"\n{'─' * 55}\n"
-        f"  CAV Camera Perception Pipeline\n"
-        f"{'─' * 55}\n"
-        f"  Camera index : {args.camera}\n"
-        f"  YOLO model   : {args.model}\n"
-        f"  Logging      : {'disabled' if args.no_log else 'enabled'}\n"
-        f"  V2X sim      : {'disabled' if args.no_v2x else 'enabled'}\n"
-        f"  Press  q  or  ESC  to quit\n"
-        f"{'─' * 55}\n"
+        f"\n{sep}\n"
+        f"  CAV Camera Perception Pipeline  (v2)\n"
+        f"{sep}\n"
+        f"  Camera  : index={cfg['camera']['index']}  "
+        f"{cfg['camera']['width']}x{cfg['camera']['height']}@{cfg['camera']['fps']}\n"
+        f"  Model   : {cfg['model']['name']}  "
+        f"conf={cfg['model']['confidence']}  "
+        f"tracker={cfg['model'].get('tracker','bytetrack.yaml')}\n"
+        f"  Logging : {'disabled' if args.no_log else 'CSV + JSONL'}\n"
+        f"  V2X sim : {'disabled' if args.no_v2x else 'enabled (BSM/DOM/ISM)'}\n"
+        f"  Press  q / ESC  to quit   |   s  to screenshot\n"
+        f"{sep}\n"
     )
 
     # ── Capture loop ──────────────────────────────────────────────────────────
-    frame_id   = 0
-    fps        = 0.0
-    prev_time  = time.perf_counter()
+    frame_id = 0
 
     try:
         while True:
@@ -176,36 +136,54 @@ def main() -> int:
                 print("[Main] Frame capture failed — camera disconnected?")
                 break
 
-            # Object detection
+            h, w = frame.shape[:2]
+
+            # Detection + tracking
             detections = detector.detect(frame)
 
-            # Decision logic
-            decision = decision_engine.evaluate(detections, frame_id)
+            # Decision engine
+            decision = decision_engine.evaluate(detections, frame_id, frame_w=w)
 
-            # V2X update (non-blocking; runs on its own thread)
+            # V2X (non-blocking background thread)
             if v2x is not None:
-                v2x.update_detections(detections)
+                v2x.update(detections)
 
-            # CSV logging (throttled by LOG_EVERY_N_FRAMES)
-            if logger is not None and frame_id % LOG_EVERY_N_FRAMES == 0:
+            # Logging
+            if logger is not None and frame_id % log_n == 0:
                 logger.log(detections, frame_id)
 
-            # Frame annotation
+            # Annotate frame
             detector.annotate_frame(frame, detections)
-            _draw_fps(frame, fps)
-            _draw_decision(frame, decision.suggested_action, decision.alerts)
+
+            fps = fps_counter.tick()
+            if cfg.get("display", {}).get("show_fps", True):
+                draw_fps(frame, fps)
+
+            draw_decision(frame, decision.suggested_action, decision.alerts)
+            draw_info_bar(
+                frame,
+                f"frame={frame_id}  objects={len(detections)}  "
+                f"model={cfg['model']['name']}",
+            )
+
+            # Frame saving
+            if save_every or (save_on_det and detections):
+                saved = save_frame(frame, output_dir, prefix="cav")
+                # Only print occasionally to avoid log spam
+                if frame_id % 30 == 0:
+                    print(f"[Main] Frame saved → {saved}")
 
             # Display
-            cv2.imshow(DISPLAY_WINDOW_NAME, frame)
+            cv2.imshow(win_name, frame)
             key = cv2.waitKey(1) & 0xFF
+
             if key in (ord("q"), 27):          # q or ESC
                 print("[Main] Quit signal received.")
                 break
+            elif key == ord("s"):              # manual screenshot
+                saved = save_frame(frame, output_dir, prefix="screenshot")
+                print(f"[Main] Screenshot → {saved}")
 
-            # FPS update
-            now       = time.perf_counter()
-            fps       = 1.0 / max(now - prev_time, 1e-9)
-            prev_time = now
             frame_id += 1
 
     except KeyboardInterrupt:

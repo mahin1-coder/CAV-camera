@@ -2,21 +2,36 @@
 Camera module — USB camera capture via OpenCV.
 
 Handles device initialisation, frame reading, and graceful shutdown.
+Resolution and FPS are read from the pipeline config dict.
 Prints actionable troubleshooting steps when the camera cannot be opened.
 """
+# ── Upgrade notes ────────────────────────────────────────────────────────────
+# v2: config-dict driven (no more hardcoded constants from src/config.py)
 
 from __future__ import annotations
 
 import cv2
 
-from src.config import CAMERA_INDEX, FRAME_WIDTH, FRAME_HEIGHT, TARGET_FPS
+from typing import Any
 
 
 class Camera:
-    """Manages a USB camera using cv2.VideoCapture."""
+    """
+    Manages a USB camera using cv2.VideoCapture.
 
-    def __init__(self, index: int = CAMERA_INDEX) -> None:
-        self.index = index
+    Parameters
+    ----------
+    cfg : dict
+        The ``camera`` section of the pipeline config, e.g.::
+
+            {"index": 0, "width": 1280, "height": 720, "fps": 30}
+    """
+
+    def __init__(self, cfg: dict[str, Any]) -> None:
+        self.index   = cfg.get("index",  0)
+        self._width  = cfg.get("width",  1280)
+        self._height = cfg.get("height", 720)
+        self._fps    = cfg.get("fps",    30)
         self._cap: cv2.VideoCapture | None = None
 
     # ── Public API ────────────────────────────────────────────────────────────
@@ -40,9 +55,9 @@ class Camera:
 
         # Request preferred resolution and frame-rate.
         # The camera driver may silently cap these to hardware limits.
-        self._cap.set(cv2.CAP_PROP_FRAME_WIDTH,  FRAME_WIDTH)
-        self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, FRAME_HEIGHT)
-        self._cap.set(cv2.CAP_PROP_FPS,          TARGET_FPS)
+        self._cap.set(cv2.CAP_PROP_FRAME_WIDTH,  self._width)
+        self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self._height)
+        self._cap.set(cv2.CAP_PROP_FPS,          self._fps)
 
         actual_w   = int(self._cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         actual_h   = int(self._cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
