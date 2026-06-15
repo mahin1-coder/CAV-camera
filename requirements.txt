@@ -1,5 +1,5 @@
-# CAV Camera Perception Pipeline — Python dependencies  (v2)
-# Tested on Python 3.10+
+# CAV Camera Perception Dashboard — Python dependencies  (v3)
+# Tested on Python 3.10+ / macOS ARM, Ubuntu 22.04
 #
 # Install with:
 #   pip install -r requirements.txt
@@ -7,14 +7,21 @@
 # ── Core computer vision ──────────────────────────────────────────────────────
 opencv-python>=4.9.0.80
 
-# ── YOLO inference + ByteTrack/BoT-SORT tracking (bundles PyTorch) ────────────
+# ── YOLO inference + ByteTrack/BoT-SORT tracking ─────────────────────────────
 ultralytics>=8.3.0
 
 # ── Numerical computing ───────────────────────────────────────────────────────
 numpy>=1.26.0
 
-# ── Structured data / CSV + JSON logging ─────────────────────────────────────
+# ── Structured data / CSV + JSON logging ──────────────────────────────────────
 pandas>=2.2.0
 
 # ── YAML config loading ───────────────────────────────────────────────────────
 pyyaml>=6.0
+
+# ── ByteTrack dependency (auto-installed by ultralytics if missing) ───────────
+lap>=0.5.12
+
+# ── Depth estimation (MiDaS via torch.hub) ───────────────────────────────────
+# torch + torchvision come with ultralytics; timm is needed for MiDaS transforms
+timm>=0.9.0

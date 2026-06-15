@@ -95,3 +95,19 @@ v2x:
   enabled:               true
   vehicle_id:            "EGO_001"
   broadcast_interval_s:  1.0
+
+# ── Depth Estimation (MiDaS_small, optional) ──────────────────────────────────
+# enabled: true  → tries to load MiDaS from torch.hub on first run (~30 MB)
+# enabled: false → always uses bbox-distance fallback (faster, offline)
+depth:
+  enabled:        true     # set false to skip MiDaS entirely
+  every_n_frames: 5        # run depth only on every Nth frame (save CPU)
+
+# ── Bird's-Eye-View World Map ─────────────────────────────────────────────────
+bev:
+  max_range_m:   20.0   # Maximum depth shown on the BEV canvas (metres)
+  half_fov_m:    10.0   # Half-width of the visible FOV at max range (metres)
+
+# ── Dashboard ─────────────────────────────────────────────────────────────────
+dashboard:
+  window_name:  "CAV Perception Dashboard"
