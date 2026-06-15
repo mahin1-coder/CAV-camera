@@ -136,9 +136,9 @@ class Detector:
         self._conf          = model_cfg["confidence"]
         self._iou           = model_cfg["iou"]
         self._device        = model_cfg.get("device", "") or ""
-        self._class_ids     = cls_cfg["ids"]
+        self._class_ids     = cls_cfg["ids"] or None   # None = detect all
         self._class_names: dict[int, str] = {
-            int(k): v for k, v in cls_cfg["names"].items()
+            int(k): v for k, v in (cls_cfg.get("names") or {}).items()
         }
         self._colors: dict[str, tuple[int, int, int]] = {
             k: tuple(v)  # type: ignore[arg-type]
@@ -154,9 +154,12 @@ class Detector:
         print(f"[Detector] Loading model: {self._model_name} …")
         self._model   = YOLO(self._model_name)
         self._tracker = Tracker(self._model, model_cfg.get("tracker", "bytetrack.yaml"))
+        # Merge YOLO's built-in names so every class ID has a label
+        for cid, cname in self._model.names.items():
+            self._class_names.setdefault(int(cid), cname)
+        active = "ALL" if self._class_ids is None else str(len(self._class_ids))
         print(
-            f"[Detector] Ready.  Tracking classes: "
-            f"{list(self._class_names.values())} | "
+            f"[Detector] Ready.  Classes: {active} | "
             f"tracker: {model_cfg.get('tracker', 'bytetrack.yaml')}"
         )
 

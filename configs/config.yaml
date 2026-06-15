@@ -20,17 +20,11 @@ model:
   device:      ""              # "" = auto (cpu/mps/cuda:0)
 
 # ── Classes of Interest (COCO IDs) ────────────────────────────────────────────
+# ids: null  →  detect ALL 80 COCO classes (no filter)
+# ids: [0,2,7] →  filter to specific classes only
 classes:
-  ids: [0, 1, 2, 3, 5, 7, 9, 11]
-  names:
-    0:  "person"
-    1:  "bicycle"
-    2:  "car"
-    3:  "motorcycle"
-    5:  "bus"
-    7:  "truck"
-    9:  "traffic light"
-    11: "stop sign"
+  ids: null
+  names: {}
 
 # Bounding-box colours per class (BGR)
   colors:

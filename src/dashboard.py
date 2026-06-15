@@ -140,11 +140,16 @@ class Dashboard:
         frame: np.ndarray,
         detections: list[Detection],
     ) -> np.ndarray:
-        """Camera frame annotated with YOLO bounding boxes and class labels."""
-        out = frame.copy()
+        """Camera frame resized to panel dims, then annotated at readable scale."""
+        fh, fw = frame.shape[:2]
+        out = cv2.resize(frame, (RIGHT_W, PANEL_H), interpolation=cv2.INTER_AREA)
+        sx, sy = RIGHT_W / fw, PANEL_H / fh
+
         for det in detections:
             color = CLASS_COLORS.get(det.class_name, _DEFAULT_COLOR)
-            cv2.rectangle(out, (det.x1, det.y1), (det.x2, det.y2), color, 2)
+            x1 = int(det.x1 * sx); y1 = int(det.y1 * sy)
+            x2 = int(det.x2 * sx); y2 = int(det.y2 * sy)
+            cv2.rectangle(out, (x1, y1), (x2, y2), color, 1)
 
             parts: list[str] = []
             if det.track_id is not None:
@@ -154,12 +159,12 @@ class Dashboard:
                 parts.append(f"~{det.estimated_distance_m:.1f}m")
             label = "  ".join(parts)
 
-            ty = max(det.y1 - 5, 14)
-            (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.42, 1)
-            cv2.rectangle(out, (det.x1, ty - th - 2), (det.x1 + tw + 2, ty + 2),
+            ty = max(y1 - 3, 11)
+            (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.38, 1)
+            cv2.rectangle(out, (x1, ty - th - 1), (x1 + tw + 2, ty + 1),
                           (0, 0, 0), -1)
-            cv2.putText(out, label, (det.x1 + 1, ty),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.42, color, 1, cv2.LINE_AA)
+            cv2.putText(out, label, (x1 + 1, ty),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.38, color, 1, cv2.LINE_AA)
         return out
 
     def _make_tracking_panel(
@@ -168,23 +173,30 @@ class Dashboard:
         detections: list[Detection],
     ) -> np.ndarray:
         """
-        Darkened camera frame with:
-          - Coloured bounding boxes per track
-          - Fading colour trail (last N positions)
-          - Dashed linear-extrapolation prediction
+        Darkened frame resized to panel dims, with trails and prediction drawn
+        at readable scale.
         """
-        out = (frame * 0.30).astype(np.uint8)
+        fh, fw = frame.shape[:2]
+        out = cv2.resize(
+            (frame * 0.30).astype(np.uint8),
+            (RIGHT_W, PANEL_H),
+            interpolation=cv2.INTER_AREA,
+        )
+        sx, sy = RIGHT_W / fw, PANEL_H / fh
 
         for det in detections:
             color = CLASS_COLORS.get(det.class_name, _DEFAULT_COLOR)
-            cv2.rectangle(out, (det.x1, det.y1), (det.x2, det.y2), color, 1)
+            x1 = int(det.x1 * sx); y1 = int(det.y1 * sy)
+            x2 = int(det.x2 * sx); y2 = int(det.y2 * sy)
+            cx = int(det.cx * sx); cy = int(det.cy * sy)
+            cv2.rectangle(out, (x1, y1), (x2, y2), color, 1)
 
             if det.track_id is not None:
                 trail = self._trail_history.setdefault(
                     det.track_id,
                     collections.deque(maxlen=_TRAIL_MAXLEN),
                 )
-                trail.append((det.cx, det.cy))
+                trail.append((cx, cy))
                 pts = list(trail)
                 n   = len(pts)
 
@@ -201,15 +213,15 @@ class Dashboard:
                     for step in range(1, 9):
                         px = pts[-1][0] + dx * step * 2
                         py = pts[-1][1] + dy * step * 2
-                        if 0 <= px < frame.shape[1] and 0 <= py < frame.shape[0]:
+                        if 0 <= px < RIGHT_W and 0 <= py < PANEL_H:
                             r = max(1, 3 - step // 3)
                             cv2.circle(out, (px, py), r, color, -1, cv2.LINE_AA)
 
-                # Track ID label
+                # Track ID + class label
                 cv2.putText(
-                    out, f"T{det.track_id}",
-                    (det.cx - 8, det.cy - 8),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.32, color, 1, cv2.LINE_AA,
+                    out, f"T{det.track_id} {det.class_name}",
+                    (x1, max(y1 - 3, 10)),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.36, color, 1, cv2.LINE_AA,
                 )
 
         # Prune stale trails
@@ -259,8 +271,8 @@ class Dashboard:
 
         p_raw  = rsz(raw_frame,  LEFT_W,   PANEL_H)
         p_bot  = rsz(bot_left,   LEFT_W,   PANEL_H)
-        p_det  = rsz(det_frame,  RIGHT_W,  PANEL_H)
-        p_trk  = rsz(trk_frame,  RIGHT_W,  PANEL_H)
+        p_det  = det_frame   # already RIGHT_W × PANEL_H
+        p_trk  = trk_frame   # already RIGHT_W × PANEL_H
         p_bev  = rsz(bev_frame,  CENTER_W, CANVAS_H)
 
         # ── Assemble canvas ───────────────────────────────────────────────

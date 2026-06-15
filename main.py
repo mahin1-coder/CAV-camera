@@ -152,8 +152,8 @@ def main() -> int:
 
     while True:
         # ── Capture ───────────────────────────────────────────────────────────
-        frame = camera.read()
-        if frame is None:
+        ret, frame = camera.read()
+        if not ret or frame is None:
             print("[Main] Frame capture failed — camera disconnected?")
             break
 
@@ -193,8 +193,7 @@ def main() -> int:
 
         # ── Logging ───────────────────────────────────────────────────────────
         if logger and frame_id % log_n == 0:
-            for det in detections:
-                logger.log(det, frame_id)
+            logger.log(detections, frame_id)
 
         # ── V2X ───────────────────────────────────────────────────────────────
         if v2x:
