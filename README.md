@@ -1,114 +1,141 @@
 # CAV Camera Perception Dashboard
 
-Multi-panel autonomous vehicle perception dashboard. USB camera in, research-demo dashboard out.
+A real-time perception dashboard I built for connected and autonomous vehicle (CAV) research. Plug in a USB camera and it runs a full multi-panel pipeline — object detection, tracking, depth estimation, a bird's-eye-view world map, and V2X message simulation, all in one window.
 
 ---
 
-## What it shows
+## What it looks like
 
 ```
 ┌──────────────┬──────────────────────────┬──────────────┐
-│  RAW CAMERA  │                          │   OBJECT     │
-│   + FPS      │    SEMANTIC WORLD MAP    │  DETECTION   │
-│              │    (pseudo-3D BEV)       │  + Action    │
+│  RAW CAMERA  │                          │   DETECTION  │
+│   + FPS      │    BEV WORLD MAP         │   YOLO11     │
+│              │    (pseudo-3D)           │   + Action   │
 ├──────────────┤                          ├──────────────┤
-│ SLAM/FEATURES│                          │   TRACKED    │
-│  (or DEPTH)  │                          │  PREDICTION  │
+│ SLAM/DEPTH   │                          │   TRACKING   │
+│  FEATURES    │                          │   + TRAILS   │
 └──────────────┴──────────────────────────┴──────────────┘
 ```
 
-- **Raw camera** with FPS counter
-- **SLAM / Features** panel: ORB keypoints on Canny edges (green, SLAM aesthetic). Replaced by MiDaS INFERNO depth colourmap when depth model loads successfully.
-- **Semantic World Map**: pseudo-3D bird's-eye-view. Detected objects projected onto a top-down canvas using estimated distance + lateral position. Per-track trails and linear prediction arrows included. Ego vehicle shown as cyan triangle.
-- **Object Detection**: YOLO11 boxes + track IDs + distance labels
-- **Tracked Prediction**: darkened frame with fading colour trails and dashed linear extrapolation per track
+**Top-left** — raw camera feed with live FPS  
+**Bottom-left** — ORB keypoints on Canny edges (SLAM-style), switches to MiDaS depth colormap if the depth model loads  
+**Centre** — bird's-eye-view world map: objects projected top-down with distance, trails, and prediction arrows  
+**Top-right** — YOLO11 detections with track IDs and estimated distances  
+**Bottom-right** — tracking panel with fading trails and linear motion extrapolation  
 
-Action states: `NOMINAL` / `CAUTION` / `SLOW_DOWN` / `STOP` / `WAIT` / `PROCEED`
+Decision banner shows: `NOMINAL` / `CAUTION` / `SLOW_DOWN` / `STOP` / `WAIT` / `PROCEED`
 
 ---
 
-## Setup
+## Getting started
+
+> I use Conda on macOS Apple Silicon — here's the setup that worked for me:
 
 ```bash
 git clone https://github.com/mahin1-coder/CAV-camera.git
 cd CAV-camera
-python3 -m venv .venv
-source .venv/bin/activate
+conda create -n cav-perception python=3.11 -y
+conda activate cav-perception
 pip install -r requirements.txt
 ```
 
-**macOS only (one-time):** System Settings → Privacy & Security → Camera → enable Terminal.
+If you prefer a plain venv:
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+**macOS camera permission:** System Settings → Privacy & Security → Camera → enable Terminal (one-time).
 
 ---
 
 ## Running
 
 ```bash
-python main.py --camera 0 --model yolo11n.pt --conf 0.35
+python main.py --camera 0
 ```
 
-Other options:
+Other flags:
 
-```bash
-python main.py --camera 1            # different camera index
-python main.py --no-v2x --no-log     # detection + dashboard only
-python main.py --save-output         # auto-save every frame to outputs/
-python main.py --conf 0.45           # stricter confidence
-```
+| Flag | What it does |
+|---|---|
+| `--camera 1` | use a different camera index |
+| `--conf 0.45` | stricter detection confidence |
+| `--no-v2x` | skip V2X message output |
+| `--no-log` | don't write CSV/JSONL logs |
+| `--save-output` | auto-save every frame to `outputs/` |
 
-Keys: `q` / `ESC` to quit, `s` to screenshot.
-
-Screenshots save to `outputs/cav_<timestamp>.jpg`.
+Keys: **`q`** or **`ESC`** to quit, **`s`** to save a screenshot.  
+Screenshots go to `outputs/cav_<timestamp>.jpg`.
 
 ---
 
 ## Depth estimation
 
-On first run the pipeline tries to download and load **MiDaS_small** (~30 MB via torch.hub). If it loads, the bottom-left panel shows a depth colourmap and the banner prints `MiDaS_small`. If it fails for any reason (no internet, GPU issues, etc.) it falls back silently to bounding-box-based distance — the dashboard still runs normally.
+On first run it downloads **MiDaS_small** (~30 MB via `torch.hub`). If it loads successfully, the bottom-left panel shows a depth colormap instead of the edge/keypoint view. If the download fails or MiDaS errors out, the pipeline falls back to bounding-box-based distance estimation — nothing breaks, you just lose the colormap.
 
-To skip MiDaS entirely, set `depth.enabled: false` in `configs/config.yaml`.
+To skip MiDaS entirely:
+```yaml
+# configs/config.yaml
+depth:
+  enabled: false
+```
 
 ---
 
-## Project layout
+## Project structure
 
 ```
-├── main.py
+├── main.py                      # entry point, main loop
 ├── configs/
-│   └── config.yaml          # all tuneable parameters
+│   └── config.yaml              # every tunable parameter lives here
 ├── src/
-│   ├── camera.py            # USB capture
-│   ├── detector.py          # YOLO11 + ByteTrack
-│   ├── tracker.py           # ByteTrack/BoT-SORT wrapper
-│   ├── depth.py             # MiDaS depth (with bbox fallback)
-│   ├── bev_mapper.py        # pseudo-3D BEV world map
-│   ├── dashboard.py         # multi-panel compositor
-│   ├── decision_engine.py   # stop-sign state machine
-│   ├── v2x.py               # V2X BSM/DOM/ISM simulation
-│   ├── logger.py            # CSV + JSONL writer
-│   └── utils.py             # FPS counter, config loader, etc.
-├── logs/                    # detections.csv + detections.jsonl
-└── outputs/                 # saved dashboard screenshots
+│   ├── camera.py                # USB capture wrapper
+│   ├── detector.py              # YOLO11n + ByteTrack
+│   ├── tracker.py               # tracker wrapper
+│   ├── depth.py                 # MiDaS depth + bbox fallback
+│   ├── bev_mapper.py            # pseudo-3D bird's-eye-view
+│   ├── dashboard.py             # 5-panel compositor
+│   ├── decision_engine.py       # simple state machine (NOMINAL → STOP)
+│   ├── v2x.py                   # simulated BSM / DOM / ISM messages
+│   ├── logger.py                # CSV + JSONL writer
+│   └── utils.py                 # FPS counter, config loader
+├── logs/                        # detections.csv + detections.jsonl
+└── outputs/                     # saved screenshots
 ```
 
 ---
 
-## Configuration
+## Config
 
-All parameters in `configs/config.yaml`. Common ones:
+Everything tunable is in `configs/config.yaml`. The main ones:
 
 ```yaml
 model:
-  confidence: 0.35           # detection threshold
-  tracker: "bytetrack.yaml"  # or "botsort.yaml"
+  confidence: 0.35           # lower = more detections, more false positives
+  tracker: "bytetrack.yaml"
+
+classes:
+  ids: null                  # null = all 80 COCO classes
 
 depth:
-  enabled: true              # false = always use bbox-distance fallback
-  every_n_frames: 5          # run depth only every Nth frame (saves CPU)
+  enabled: true
+  every_n_frames: 5          # only run MiDaS every 5 frames to save compute
 
 bev:
-  max_range_m: 20.0          # furthest distance shown on world map
+  max_range_m: 20.0          # how far the world map shows
 ```
+
+---
+
+## Logs
+
+Every detection is written to two files at the same time:
+- `logs/detections.csv` — easy to open in Excel / pandas
+- `logs/detections.jsonl` — one JSON object per line, good for downstream processing
+
+Both are flushed cleanly when you quit.
 
 ---
 
@@ -122,26 +149,14 @@ pip install -r requirements.txt
 python main.py --camera 0
 ```
 
-Camera permission issue: `sudo usermod -aG video $USER` then log out and back in.
+Camera permission: `sudo usermod -aG video $USER` then re-login.
 
-For Jetson: install the NVIDIA PyTorch wheel for your JetPack version **before** `pip install -r requirements.txt` to get CUDA depth inference.
-
----
-
-## Logs
-
-Two files written simultaneously:
-- `logs/detections.csv` — one row per detection per frame
-- `logs/detections.jsonl` — same data as JSON Lines
-
-Both flush cleanly on quit.
+Jetson: install the NVIDIA PyTorch wheel for your JetPack version *before* running pip, so you get CUDA inference on the depth model.
 
 ---
 
-## Notes
+## Honest caveats
 
-- The BEV world map is **not real SLAM**. It uses estimated distance (bounding-box width formula or MiDaS) and the object's horizontal position in the frame to project onto the top-down canvas. Accurate only when camera is calibrated.
-- V2X messages (BSM/DOM/ISM) are simulated to stdout — not real DSRC/C-V2X radio.
-- Distance estimates are approximate. For real-world use, calibrate the focal length with a checkerboard or use stereo/LiDAR.
-
----
+- The BEV map is **not real SLAM**. It projects objects using estimated distance + horizontal frame position. It looks like SLAM but there's no loop closure, no pose graph — it's a visualisation tool.
+- V2X messages (BSM, DOM, ISM) are printed to stdout for demo purposes. There's no actual DSRC or C-V2X radio involved.
+- Distance numbers are rough. For anything real, calibrate your focal length with a checkerboard or swap in a stereo camera / LiDAR.
