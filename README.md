@@ -145,7 +145,3 @@ Both flush cleanly on quit.
 - Distance estimates are approximate. For real-world use, calibrate the focal length with a checkerboard or use stereo/LiDAR.
 
 ---
-
-## License
-
-MIT
