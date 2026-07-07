@@ -117,3 +117,16 @@ bev:
 # ── Dashboard ─────────────────────────────────────────────────────────────────
 dashboard:
   window_name:  "CAV Perception Dashboard"
+
+# ── nuScenes Dataset Source ───────────────────────────────────────────────────
+# Used when running with: python main.py --source nuscenes
+# Download the mini split (~4 GB) from https://www.nuscenes.org/nuscenes
+# and extract it, then set dataroot to that folder.
+nuscenes:
+  dataroot:   "/data/nuscenes"       # path to extracted nuScenes dataset root
+  version:    "v1.0-mini"            # "v1.0-mini" | "v1.0-trainval" | "v1.0-test"
+  scene_idx:  0                      # which scene to play (0-based)
+  camera:     "CAM_FRONT"            # CAM_FRONT | CAM_FRONT_LEFT | CAM_FRONT_RIGHT
+                                     # CAM_BACK  | CAM_BACK_LEFT  | CAM_BACK_RIGHT
+  loop:       false                  # restart scene when it ends
+  fps:        12.0                   # nuScenes keyframe rate (informational only)

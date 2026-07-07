@@ -36,9 +36,10 @@ import sys
 
 import cv2
 
-from src.bev_mapper      import BEVMapper
-from src.camera          import Camera
-from src.dashboard       import Dashboard, save_dashboard
+from src.bev_mapper        import BEVMapper
+from src.camera            import Camera
+from src.nuscenes_loader   import NuScenesLoader
+from src.dashboard         import Dashboard, save_dashboard
 from src.decision_engine import DecisionEngine
 from src.depth           import DepthEstimator
 from src.detector        import Detector
@@ -68,6 +69,18 @@ def _build_parser() -> argparse.ArgumentParser:
                    help="Save every dashboard frame to outputs/.")
     p.add_argument("--config",      type=str,   default="configs/config.yaml",
                    help="Path to YAML config file.")
+    # ── nuScenes flags ────────────────────────────────────────────────────────
+    p.add_argument("--source",      type=str,   default="camera",
+                   choices=["camera", "nuscenes"],
+                   help="Input source: 'camera' (USB) or 'nuscenes' (dataset).")
+    p.add_argument("--nuscenes-data",    type=str, default=None,
+                   help="Path to nuScenes dataset root (overrides config.yaml).")
+    p.add_argument("--nuscenes-version", type=str, default=None,
+                   help="nuScenes version string, e.g. v1.0-mini.")
+    p.add_argument("--nuscenes-scene",   type=int, default=None,
+                   help="Scene index to play (0-based).")
+    p.add_argument("--nuscenes-camera",  type=str, default=None,
+                   help="Camera channel, e.g. CAM_FRONT, CAM_BACK.")
     return p
 
 
@@ -85,10 +98,21 @@ def main() -> int:
 
     cfg = merge_cli(cfg, args.camera, args.model, args.conf)
 
-    # ── Camera ────────────────────────────────────────────────────────────────
-    camera = Camera(cfg["camera"])
+    # ── Input source: USB camera or nuScenes dataset ─────────────────────────
+    use_nuscenes = (args.source == "nuscenes")
+
+    if use_nuscenes:
+        ns_cfg = dict(cfg.get("nuscenes", {}))
+        if args.nuscenes_data:    ns_cfg["dataroot"]  = args.nuscenes_data
+        if args.nuscenes_version: ns_cfg["version"]   = args.nuscenes_version
+        if args.nuscenes_scene is not None: ns_cfg["scene_idx"] = args.nuscenes_scene
+        if args.nuscenes_camera:  ns_cfg["camera"]    = args.nuscenes_camera
+        source = NuScenesLoader(ns_cfg)
+    else:
+        source = Camera(cfg["camera"])
+
     try:
-        camera.open()
+        source.open()
     except RuntimeError as exc:
         print(f"\n[ERROR] {exc}")
         return 1
@@ -130,12 +154,19 @@ def main() -> int:
     # ── Banner ────────────────────────────────────────────────────────────────
     sep = "─" * 62
     depth_status = "MiDaS_small" if depth_est.available else "bbox-distance fallback"
+    if use_nuscenes:
+        src_str = (f"nuScenes {source._version}  scene={source._scene_idx} "
+                   f"'{source.scene_name}'  {source.total_frames} frames  "
+                   f"ch={source._channel}")
+    else:
+        src_str = (f"USB index={cfg['camera']['index']}  "
+                   f"{cfg['camera']['width']}x{cfg['camera']['height']}"
+                   f"@{cfg['camera']['fps']}")
     print(
         f"\n{sep}\n"
         f"  CAV Camera Perception Dashboard  (v3)\n"
         f"{sep}\n"
-        f"  Camera  : index={cfg['camera']['index']}  "
-        f"{cfg['camera']['width']}x{cfg['camera']['height']}@{cfg['camera']['fps']}\n"
+        f"  Source  : {src_str}\n"
         f"  Model   : {cfg['model']['name']}  "
         f"conf={cfg['model']['confidence']}  "
         f"tracker={cfg['model'].get('tracker', 'bytetrack.yaml')}\n"
@@ -152,9 +183,12 @@ def main() -> int:
 
     while True:
         # ── Capture ───────────────────────────────────────────────────────────
-        ret, frame = camera.read()
+        ret, frame = source.read()
         if not ret or frame is None:
-            print("[Main] Frame capture failed — camera disconnected?")
+            if use_nuscenes:
+                print("[Main] nuScenes scene complete.")
+            else:
+                print("[Main] Frame capture failed — camera disconnected?")
             break
 
         fps = fps_counter.tick()
@@ -218,7 +252,7 @@ def main() -> int:
 
     # ── Shutdown ──────────────────────────────────────────────────────────────
     cv2.destroyAllWindows()
-    camera.release()
+    source.release()
     if logger:
         logger.close()
     if v2x:
