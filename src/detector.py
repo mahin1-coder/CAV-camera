@@ -19,6 +19,7 @@ Upgrade notes (v2)
 
 from __future__ import annotations
 
+import time
 from typing import Any
 
 import cv2
@@ -136,6 +137,10 @@ class Detector:
         self._conf          = model_cfg["confidence"]
         self._iou           = model_cfg["iou"]
         self._device        = model_cfg.get("device", "") or ""
+        self._imgsz         = model_cfg.get("imgsz", 640)
+        self._max_det       = int(model_cfg.get("max_det", 100))
+        self._agnostic_nms  = bool(model_cfg.get("agnostic_nms", False))
+        self._warmup        = bool(model_cfg.get("warmup", True))
         self._class_ids     = cls_cfg["ids"] or None   # None = detect all
         self._class_names: dict[int, str] = {
             int(k): v for k, v in (cls_cfg.get("names") or {}).items()
@@ -150,6 +155,7 @@ class Detector:
         self._show_distance = disp_cfg.get("show_distance", True)
         self._font_scale    = disp_cfg.get("font_scale",    0.55)
         self._box_thickness = disp_cfg.get("box_thickness", 2)
+        self.last_inference_ms = 0.0
 
         print(f"[Detector] Loading model: {self._model_name} …")
         self._model   = YOLO(self._model_name)
@@ -162,6 +168,8 @@ class Detector:
             f"[Detector] Ready.  Classes: {active} | "
             f"tracker: {model_cfg.get('tracker', 'bytetrack.yaml')}"
         )
+        if self._warmup:
+            self._warmup_model()
 
     # ── Inference ─────────────────────────────────────────────────────────────
 
@@ -172,12 +180,22 @@ class Detector:
         Returns a list of Detection objects filtered to the configured
         classes of interest, sorted by descending confidence.
         """
+        if frame is None or frame.size == 0:
+            return []
+        if frame.ndim != 3 or frame.shape[2] != 3:
+            raise ValueError("Detector.detect expects a non-empty BGR image with 3 channels.")
+
+        frame_h, frame_w = frame.shape[:2]
+        started = time.perf_counter()
         results = self._tracker.run(
             frame,
             conf=self._conf,
             iou=self._iou,
             classes=self._class_ids,
             device=self._device,
+            imgsz=self._imgsz,
+            max_det=self._max_det,
+            agnostic_nms=self._agnostic_nms,
         )
 
         detections: list[Detection] = []
@@ -188,7 +206,9 @@ class Detector:
             for box in boxes:
                 cls_id = int(box.cls[0].item())
                 conf   = float(box.conf[0].item())
-                x1, y1, x2, y2 = (int(v) for v in box.xyxy[0].tolist())
+                x1, y1, x2, y2 = self._clip_xyxy(box.xyxy[0].tolist(), frame_w, frame_h)
+                if x2 <= x1 or y2 <= y1:
+                    continue
 
                 track_id: int | None = None
                 if box.id is not None:
@@ -204,7 +224,36 @@ class Detector:
                 ))
 
         detections.sort(key=lambda d: d.confidence, reverse=True)
+        self.last_inference_ms = (time.perf_counter() - started) * 1000.0
         return detections
+
+    def _warmup_model(self) -> None:
+        """Run one tiny inference so first live frame does not pay setup cost."""
+        try:
+            dummy = np.zeros((64, 64, 3), dtype=np.uint8)
+            self._model.predict(
+                source=dummy,
+                conf=self._conf,
+                iou=self._iou,
+                classes=self._class_ids,
+                device=self._device or None,
+                imgsz=self._imgsz,
+                max_det=1,
+                verbose=False,
+            )
+        except Exception as exc:  # noqa: BLE001
+            print(f"[Detector] Warmup skipped: {exc}")
+
+    @staticmethod
+    def _clip_xyxy(values: list[float], frame_w: int, frame_h: int) -> tuple[int, int, int, int]:
+        """Clamp a YOLO xyxy box to valid image coordinates."""
+        x1, y1, x2, y2 = values
+        return (
+            max(0, min(frame_w - 1, int(round(x1)))),
+            max(0, min(frame_h - 1, int(round(y1)))),
+            max(0, min(frame_w - 1, int(round(x2)))),
+            max(0, min(frame_h - 1, int(round(y2)))),
+        )
 
     # ── Frame annotation ──────────────────────────────────────────────────────
 

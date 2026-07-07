@@ -170,7 +170,7 @@ def main() -> int:
                 depth_u8 = new_depth
 
         # ── Decision ──────────────────────────────────────────────────────────
-        decision = decision_engine.evaluate(detections, frame_id)
+        decision = decision_engine.evaluate(detections, frame_id, frame_w=fw)
 
         # ── BEV world map ─────────────────────────────────────────────────────
         bev_frame = bev_mapper.render(

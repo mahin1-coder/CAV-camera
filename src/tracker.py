@@ -61,6 +61,9 @@ class Tracker:
         iou:         float = 0.45,
         classes:     list[int] | None = None,
         device:      str = "",
+        imgsz:       int | tuple[int, int] | None = None,
+        max_det:     int = 100,
+        agnostic_nms: bool = False,
     ) -> list:
         """
         Run inference (with tracking when enabled) on a single BGR frame.
@@ -73,6 +76,9 @@ class Tracker:
             iou=iou,
             classes=classes,
             device=device or None,
+            imgsz=imgsz,
+            max_det=max_det,
+            agnostic_nms=agnostic_nms,
             verbose=False,
         )
 
