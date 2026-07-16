@@ -75,6 +75,9 @@ output:
   save_frames:        false   # Save every frame to outputs/
   output_dir:         "outputs"
   save_on_detection:  false   # Save a frame whenever objects are detected
+  capture_training_frames: false
+  training_frame_dir: "datasets/raw_frames"
+  capture_every_n_frames: 10
 
 # ── Distance Estimation (monocular placeholder) ───────────────────────────────
 # Calibrate FOCAL_LENGTH_PX with a checkerboard for real-world accuracy.

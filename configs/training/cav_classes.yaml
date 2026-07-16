@@ -1,0 +1,21 @@
+# CAV fine-tuning class set.
+# Used by tools/build_yolo_dataset.py and documented training commands.
+
+classes:
+  - person
+  - bicycle
+  - car
+  - motorcycle
+  - bus
+  - truck
+  - traffic light
+  - stop sign
+  - traffic cone
+  - construction barrel
+
+recommended:
+  min_conf: 0.55
+  val_ratio: 0.20
+  base_model: yolo11n.pt
+  epochs: 80
+  imgsz: 640

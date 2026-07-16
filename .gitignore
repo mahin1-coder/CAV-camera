@@ -30,6 +30,12 @@ logs/*.jsonl
 outputs/*.jpg
 outputs/*.png
 
+# ── Training data / experiment outputs ────────────────────────────────────────
+datasets/raw_frames/
+datasets/cav_yolo/images/
+datasets/cav_yolo/labels/
+runs/
+
 # ── macOS artefacts ───────────────────────────────────────────────────────────
 .DS_Store
 .AppleDouble

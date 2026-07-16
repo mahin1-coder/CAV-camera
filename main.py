@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from pathlib import Path
 
 import cv2
 
@@ -68,6 +69,8 @@ def _build_parser() -> argparse.ArgumentParser:
                    help="Disable CSV + JSON detection logging.")
     p.add_argument("--save-output", action="store_true",
                    help="Save every dashboard frame to outputs/.")
+    p.add_argument("--capture-frames", action="store_true",
+                   help="Save raw camera/dataset frames for future YOLO fine-tuning.")
     p.add_argument("--config",      type=str,   default="configs/config.yaml",
                    help="Path to YAML config file.")
     # ── nuScenes flags ────────────────────────────────────────────────────────
@@ -153,8 +156,13 @@ def main() -> int:
     output_cfg  = cfg.get("output", {})
     save_every  = args.save_output or output_cfg.get("save_frames", False)
     output_dir  = output_cfg.get("output_dir", "outputs")
+    capture_frames = args.capture_frames or output_cfg.get("capture_training_frames", False)
+    capture_dir = Path(output_cfg.get("training_frame_dir", "datasets/raw_frames"))
+    capture_every_n = max(1, int(output_cfg.get("capture_every_n_frames", 10)))
     log_n       = cfg.get("logging", {}).get("log_every_n_frames", 1)
     win_name    = cfg.get("display", {}).get("window_name", "CAV Perception Dashboard")
+    if capture_frames:
+        capture_dir.mkdir(parents=True, exist_ok=True)
 
     fps_counter = FPSCounter(window=30)
 
@@ -180,6 +188,7 @@ def main() -> int:
         f"  Ground  : {'LocateAnything' if semantic_grounder.available else 'YOLO only'}\n"
         f"  Depth   : {depth_status}\n"
         f"  Logging : {'CSV + JSONL' if logger else 'disabled'}\n"
+        f"  Capture : {str(capture_dir) if capture_frames else 'disabled'}\n"
         f"  V2X sim : {'enabled' if v2x else 'disabled'}\n"
         f"  Press  q / ESC  to quit   |   s  to screenshot\n"
         f"{sep}\n"
@@ -201,6 +210,8 @@ def main() -> int:
 
         fps = fps_counter.tick()
         fh, fw = frame.shape[:2]
+        if capture_frames and frame_id % capture_every_n == 0:
+            cv2.imwrite(str(capture_dir / f"frame_{frame_id:07d}.jpg"), frame)
 
         # ── Detection ─────────────────────────────────────────────────────────
         detections = detector.detect(frame)

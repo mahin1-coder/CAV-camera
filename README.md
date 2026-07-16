@@ -95,6 +95,50 @@ The app will keep running with YOLO only if LocateAnything is not installed or f
 
 ---
 
+## Making the detector better
+
+The project now has a full improvement loop: capture real frames, use YOLO plus optional LocateAnything to produce pseudo-labels, convert those labels into Ultralytics YOLO format, fine-tune, evaluate, then deploy the best weights back into `configs/config.yaml`.
+
+1. Collect frames and detections:
+
+```bash
+python main.py --camera 0 --capture-frames
+```
+
+This writes raw frames to `datasets/raw_frames/` and detections to `logs/detections.jsonl`.
+
+2. Build a YOLO dataset:
+
+```bash
+python tools/build_yolo_dataset.py \
+  --frames datasets/raw_frames \
+  --detections logs/detections.jsonl \
+  --out datasets/cav_yolo \
+  --min-conf 0.55
+```
+
+3. Fine-tune YOLO:
+
+```bash
+python tools/train_yolo.py \
+  --data datasets/cav_yolo/data.yaml \
+  --model yolo11n.pt \
+  --epochs 80 \
+  --imgsz 640
+```
+
+4. Deploy the best model:
+
+```yaml
+# configs/config.yaml
+model:
+  name: "runs/cav/yolo_cav/weights/best.pt"
+```
+
+Use this loop repeatedly. Good real-world data from your camera usually improves the project more than swapping model names every week.
+
+---
+
 ## Depth estimation
 
 On first run it downloads **MiDaS_small** (~30 MB via `torch.hub`). If it loads successfully, the bottom-left panel shows a depth colormap instead of the edge/keypoint view. If the download fails or MiDaS errors out, the pipeline falls back to bounding-box-based distance estimation — nothing breaks, you just lose the colormap.
@@ -126,6 +170,9 @@ depth:
 │   ├── v2x.py                   # simulated BSM / DOM / ISM messages
 │   ├── logger.py                # CSV + JSONL writer
 │   └── utils.py                 # FPS counter, config loader
+├── tools/
+│   ├── build_yolo_dataset.py    # logs + frames → YOLO dataset
+│   └── train_yolo.py            # fine-tune/evaluate YOLO
 ├── logs/                        # detections.csv + detections.jsonl
 └── outputs/                     # saved screenshots
 ```
