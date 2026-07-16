@@ -65,6 +65,10 @@ CLASS_COLORS: dict[str, tuple[int, int, int]] = {
     "truck":         (0,   255, 255),
     "traffic light": (255, 255,   0),
     "stop sign":     (0,     0, 200),
+    "traffic cone":  (0,   120, 255),
+    "construction barrel": (0, 80, 255),
+    "road sign text": (255, 255, 255),
+    "pedestrian near the curb": (80, 255, 80),
 }
 _DEFAULT_COLOR: tuple[int, int, int] = (160, 160, 160)
 

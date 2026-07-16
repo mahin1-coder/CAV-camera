@@ -27,7 +27,7 @@ model:
 # ids: null  →  detect ALL 80 COCO classes (no filter)
 # ids: [0,2,7] →  filter to specific classes only
 classes:
-  ids: null
+  ids: [0, 1, 2, 3, 5, 7, 9, 11]
   names:
     0:  person
     1:  bicycle
@@ -48,6 +48,10 @@ classes:
     truck:         [0,   255, 255]
     traffic light: [255, 255,   0]
     stop sign:     [0,     0, 200]
+    traffic cone:  [0,   120, 255]
+    construction barrel: [0, 80, 255]
+    road sign text: [255, 255, 255]
+    pedestrian near the curb: [80, 255, 80]
 
 # ── Display ───────────────────────────────────────────────────────────────────
 display:
@@ -86,6 +90,8 @@ distance:
     truck:         2.50
     traffic light: 0.30
     stop sign:     0.75
+    traffic cone:  0.30
+    construction barrel: 0.60
 
 # ── Decision Engine ───────────────────────────────────────────────────────────
 decision:
@@ -108,6 +114,36 @@ v2x:
 depth:
   enabled:        true     # set false to skip MiDaS entirely
   every_n_frames: 5        # run depth only on every Nth frame (save CPU)
+
+# ── Open-Vocabulary Grounding (LocateAnything, optional) ─────────────────────
+# Enables language-driven boxes such as "traffic cone", "road sign text", or
+# "pedestrian near the curb". Keep disabled unless NVlabs/Eagle Embodied is
+# installed and locateanything_worker is importable in this Python environment.
+locate_anything:
+  enabled: false
+  backend: "locate_anything"
+  model: "nvidia/LocateAnything-3B"
+  every_n_frames: 30
+  cache_results: true
+  duplicate_iou: 0.55
+  default_confidence: 0.50
+  use_batch_runtime: false
+  attn: null
+  vision_attn: null
+  scheduler: null
+  queries:
+    - "person"
+    - "car"
+    - "bicycle"
+    - "motorcycle"
+    - "bus"
+    - "truck"
+    - "traffic light"
+    - "stop sign"
+    - "traffic cone"
+    - "construction barrel"
+    - "road sign text"
+    - "pedestrian near the curb"
 
 # ── Bird's-Eye-View World Map ─────────────────────────────────────────────────
 bev:
