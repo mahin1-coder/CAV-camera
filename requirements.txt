@@ -29,7 +29,3 @@ timm>=0.9.0
 # ── nuScenes dataset support ──────────────────────────────────────────────────
 # Install to use --source nuscenes.  Download mini dataset from nuscenes.org
 nuscenes-devkit>=1.2.0
-
-# ── Optional open-vocabulary grounding ────────────────────────────────────────
-# LocateAnything is installed from NVlabs/Eagle Embodied, not PyPI. The app
-# lazy-loads locateanything_worker only when locate_anything.enabled=true.

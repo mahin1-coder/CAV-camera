@@ -45,7 +45,6 @@ from src.decision_engine import DecisionEngine
 from src.depth           import DepthEstimator
 from src.detector        import Detector
 from src.logger          import DetectionLogger
-from src.semantic_grounder import SemanticGrounder
 from src.utils           import FPSCounter, load_config, merge_cli
 from src.v2x             import V2XSimulator
 
@@ -124,12 +123,6 @@ def main() -> int:
     # ── Detector (YOLO + ByteTrack) ───────────────────────────────────────────
     detector = Detector(cfg)
 
-    # ── Optional open-vocabulary grounding (LocateAnything) ──────────────────
-    semantic_grounder = SemanticGrounder(
-        cfg.get("locate_anything", {}),
-        cfg.get("distance", {}),
-    )
-
     # ── Depth estimator (MiDaS, optional) ────────────────────────────────────
     depth_est = DepthEstimator(cfg.get("depth", {}))
 
@@ -185,7 +178,6 @@ def main() -> int:
         f"  Model   : {cfg['model']['name']}  "
         f"conf={cfg['model']['confidence']}  "
         f"tracker={cfg['model'].get('tracker', 'bytetrack.yaml')}\n"
-        f"  Ground  : {'LocateAnything' if semantic_grounder.available else 'YOLO only'}\n"
         f"  Depth   : {depth_status}\n"
         f"  Logging : {'CSV + JSONL' if logger else 'disabled'}\n"
         f"  Capture : {str(capture_dir) if capture_frames else 'disabled'}\n"
@@ -215,9 +207,6 @@ def main() -> int:
 
         # ── Detection ─────────────────────────────────────────────────────────
         detections = detector.detect(frame)
-        semantic_detections = semantic_grounder.run(frame, frame_id)
-        if semantic_detections:
-            detections = semantic_grounder.merge(detections, semantic_detections)
 
         # ── Depth (every N frames) ────────────────────────────────────────────
         if depth_est.should_run():

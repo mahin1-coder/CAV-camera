@@ -23,8 +23,6 @@ A real-time perception dashboard I built for connected and autonomous vehicle (C
 **Top-right** — YOLO11 detections with track IDs and estimated distances  
 **Bottom-right** — tracking panel with fading trails and linear motion extrapolation  
 
-Optional semantic grounding can add open-vocabulary boxes from LocateAnything for prompts like `traffic cone`, `road sign text`, or `pedestrian near the curb`.
-
 Decision banner shows: `NOMINAL` / `CAUTION` / `SLOW_DOWN` / `STOP` / `WAIT` / `PROCEED`
 
 ---
@@ -73,31 +71,9 @@ Screenshots go to `outputs/cav_<timestamp>.jpg`.
 
 ---
 
-## Open-vocabulary grounding
-
-YOLO/ByteTrack stays as the real-time detector. The optional LocateAnything layer is for semantic queries that fixed COCO labels do not cover, such as construction objects, sign text, or attribute-based prompts.
-
-LocateAnything is disabled by default because it is a large vision-language model. To enable it, install NVlabs/Eagle Embodied so `locateanything_worker` is importable, then update:
-
-```yaml
-# configs/config.yaml
-locate_anything:
-  enabled: true
-  every_n_frames: 30
-  queries:
-    - "traffic cone"
-    - "construction barrel"
-    - "road sign text"
-    - "pedestrian near the curb"
-```
-
-The app will keep running with YOLO only if LocateAnything is not installed or fails to load.
-
----
-
 ## Making the detector better
 
-The project now has a full improvement loop: capture real frames, use YOLO plus optional LocateAnything to produce pseudo-labels, convert those labels into Ultralytics YOLO format, fine-tune, evaluate, then deploy the best weights back into `configs/config.yaml`.
+The project now has a full improvement loop: capture real frames, use YOLO detections to produce pseudo-labels, convert those labels into Ultralytics YOLO format, fine-tune, evaluate, then deploy the best weights back into `configs/config.yaml`.
 
 1. Collect frames and detections:
 
@@ -161,7 +137,6 @@ depth:
 ├── src/
 │   ├── camera.py                # USB capture wrapper
 │   ├── detector.py              # YOLO11n + ByteTrack
-│   ├── semantic_grounder.py     # optional LocateAnything open-vocabulary boxes
 │   ├── tracker.py               # tracker wrapper
 │   ├── depth.py                 # MiDaS depth + bbox fallback
 │   ├── bev_mapper.py            # pseudo-3D bird's-eye-view
@@ -223,7 +198,7 @@ python main.py --camera 0
 
 Camera permission: `sudo usermod -aG video $USER` then re-login.
 
-Jetson: install the NVIDIA PyTorch wheel for your JetPack version *before* running pip, so you get CUDA inference on the depth model.
+Jetson: install the PyTorch wheel for your JetPack version *before* running pip, so you get accelerated inference on the depth model.
 
 ---
 

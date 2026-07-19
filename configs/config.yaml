@@ -118,36 +118,6 @@ depth:
   enabled:        true     # set false to skip MiDaS entirely
   every_n_frames: 5        # run depth only on every Nth frame (save CPU)
 
-# ── Open-Vocabulary Grounding (LocateAnything, optional) ─────────────────────
-# Enables language-driven boxes such as "traffic cone", "road sign text", or
-# "pedestrian near the curb". Keep disabled unless NVlabs/Eagle Embodied is
-# installed and locateanything_worker is importable in this Python environment.
-locate_anything:
-  enabled: false
-  backend: "locate_anything"
-  model: "nvidia/LocateAnything-3B"
-  every_n_frames: 30
-  cache_results: true
-  duplicate_iou: 0.55
-  default_confidence: 0.50
-  use_batch_runtime: false
-  attn: null
-  vision_attn: null
-  scheduler: null
-  queries:
-    - "person"
-    - "car"
-    - "bicycle"
-    - "motorcycle"
-    - "bus"
-    - "truck"
-    - "traffic light"
-    - "stop sign"
-    - "traffic cone"
-    - "construction barrel"
-    - "road sign text"
-    - "pedestrian near the curb"
-
 # ── Bird's-Eye-View World Map ─────────────────────────────────────────────────
 bev:
   max_range_m:   20.0   # Maximum depth shown on the BEV canvas (metres)
